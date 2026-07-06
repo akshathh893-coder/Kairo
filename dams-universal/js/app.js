@@ -446,6 +446,7 @@
         startQuiz(norm.questions, file.name, { strategy: 'import' });
         if (state && quiz) {
           Object.assign(quiz.state, state);
+          quiz.recountStats(); // resync O(1) counters after bulk state replace
           quiz.save();
           renderStats(quiz.stats());
           renderQuestion(currentView());

@@ -43,6 +43,14 @@
       /** @type {{ loadSession:Function, saveSession:Function }} */
       this.storage = deps.storage || DAMS.storage.Storage;
       this.state = this.storage.loadSession(deckId);
+      /**
+       * Incremental aggregate counters kept in sync as answers/flags change, so
+       * answer() and stats() are O(1) instead of rescanning the answer map.
+       * Derived once here (O(n)) from the loaded state, then maintained.
+       * @type {{correct:number, wrong:number, weak:number, bookmarks:number, marked:number}}
+       */
+      this._counts = { correct: 0, wrong: 0, weak: 0, bookmarks: 0, marked: 0 };
+      this._recount();
       this.filter = 'all';
       this.shuffled = false;
       this.timerStart = 0;
@@ -99,15 +107,31 @@
       if (!q) return { correct: false, correctIndex: -1 };
       const correct = q.correctAnswer >= 0 && choiceIndex === q.correctAnswer;
       const prev = this.state.answers[q.id];
-      this.state.answers[q.id] = { correct, chosen: choiceIndex, at: Date.now() };
-      if (!prev) this.state.stats.seen++;
-      if (correct) {
-        this.state.stats.correct = this._count((a) => a.correct);
-        delete this.state.weak[q.id];
+
+      // Roll back the previous answer's contribution (supports re-answering).
+      if (prev) {
+        if (prev.correct) this._counts.correct--;
+        else this._counts.wrong--;
       } else {
+        this.state.stats.seen++;
+      }
+
+      this.state.answers[q.id] = { correct, chosen: choiceIndex, at: Date.now() };
+
+      if (correct) {
+        this._counts.correct++;
+        if (this.state.weak[q.id] != null) {
+          delete this.state.weak[q.id];
+          this._counts.weak--;
+        }
+      } else {
+        this._counts.wrong++;
+        if (this.state.weak[q.id] == null) this._counts.weak++;
         this.state.weak[q.id] = (this.state.weak[q.id] || 0) + 1;
       }
-      this.state.stats.wrong = this._count((a) => !a.correct);
+
+      this.state.stats.correct = this._counts.correct;
+      this.state.stats.wrong = this._counts.wrong;
       this.save();
       this.emit('answered', { question: q, choiceIndex, correct });
       this.emit('stats', this.stats());
@@ -124,8 +148,13 @@
       const q = this.current();
       if (!q) return false;
       const val = !this.state.bookmarks[q.id];
-      if (val) this.state.bookmarks[q.id] = true;
-      else delete this.state.bookmarks[q.id];
+      if (val) {
+        this.state.bookmarks[q.id] = true;
+        this._counts.bookmarks++;
+      } else {
+        delete this.state.bookmarks[q.id];
+        this._counts.bookmarks--;
+      }
       this.save();
       this.emit('bookmark', { id: q.id, value: val });
       return val;
@@ -134,8 +163,13 @@
       const q = this.current();
       if (!q) return false;
       const val = !this.state.marked[q.id];
-      if (val) this.state.marked[q.id] = true;
-      else delete this.state.marked[q.id];
+      if (val) {
+        this.state.marked[q.id] = true;
+        this._counts.marked++;
+      } else {
+        delete this.state.marked[q.id];
+        this._counts.marked--;
+      }
       this.save();
       this.emit('marked', { id: q.id, value: val });
       return val;
@@ -195,26 +229,54 @@
     }
 
     // ---- Statistics --------------------------------------------------------
+    /**
+     * O(1): every field is read from the incrementally-maintained counters.
+     * @returns {{total:number, answered:number, correct:number, wrong:number,
+     *   bookmarks:number, marked:number, weak:number, accuracy:number, elapsed:number}}
+     */
     stats() {
-      const answered = Object.keys(this.state.answers).length;
-      const correct = this._count((a) => a.correct);
-      const wrong = answered - correct;
+      const { correct, wrong, weak, bookmarks, marked } = this._counts;
+      const answered = correct + wrong;
       return {
         total: this.all.length,
         answered,
         correct,
         wrong,
-        bookmarks: Object.keys(this.state.bookmarks).length,
-        marked: Object.keys(this.state.marked).length,
-        weak: Object.keys(this.state.weak).length,
+        bookmarks,
+        marked,
+        weak,
         accuracy: answered ? Math.round((correct / answered) * 100) : 0,
         elapsed: this.elapsed(),
       };
     }
-    _count(pred) {
-      let n = 0;
-      for (const a of Object.values(this.state.answers)) if (pred(a)) n++;
-      return n;
+
+    /**
+     * Rebuild the aggregate counters from `this.state` in one O(n) pass. Called
+     * on construction and after any bulk state replacement (e.g. session import)
+     * to keep the O(1) counters consistent with the underlying maps.
+     */
+    _recount() {
+      let correct = 0;
+      let wrong = 0;
+      for (const a of Object.values(this.state.answers)) {
+        if (a && a.correct) correct++;
+        else wrong++;
+      }
+      this._counts = {
+        correct,
+        wrong,
+        weak: Object.keys(this.state.weak).length,
+        bookmarks: Object.keys(this.state.bookmarks).length,
+        marked: Object.keys(this.state.marked).length,
+      };
+    }
+
+    /**
+     * Public: resynchronize counters after external code mutates `this.state`
+     * directly (import flow). Idempotent and safe to call any time.
+     */
+    recountStats() {
+      this._recount();
     }
 
     reset() {
@@ -224,6 +286,7 @@
       this.state.bookmarks = {};
       this.state.marked = {};
       this.state.stats = { seen: 0, correct: 0, wrong: 0, startedAt: Date.now(), elapsed: 0 };
+      this._counts = { correct: 0, wrong: 0, weak: 0, bookmarks: 0, marked: 0 };
       this.timerStart = Date.now();
       this._applyFilter();
       this.pos = 0;

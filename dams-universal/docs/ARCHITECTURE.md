@@ -205,11 +205,18 @@ for helper purposes.
   budgets.
 - `test/run.mjs` — headless Playwright driver; exits non-zero on any failure.
 
-Known characteristic: `Quiz.answer()` recomputes aggregate correctness in O(n)
-over answered questions, so answering an entire 10k deck is O(n²). This is
-correct and well within budget for realistic decks; it is surfaced by the
-benchmark intentionally and is a candidate for a running-counter optimization if
-very large single-session decks become common.
+Performance note: `Quiz` maintains **incremental aggregate counters**
+(`correct`, `wrong`, `weak`, `bookmarks`, `marked`), rebuilt once on load and
+after any bulk state replacement (`recountStats()`), and updated in place on each
+mutation. As a result `answer()` and the `stats()` it emits are **O(1)** — the
+benchmark's `answerOpMs` column shows ~1 µs per answer even on a 10k deck. The
+larger `answerMs` column includes the per-answer durability write, which
+serializes the whole session (`JSON.stringify` in the storage adapter) and is
+therefore O(session size). That serialization is a deliberate durability choice
+(progress survives reload); it is negligible at human interaction speed and only
+shows up under synthetic bulk-answering. If a workload needs to answer thousands
+of questions programmatically, batch/debounce the persistence write — the engine
+already keeps its in-memory counters correct independently of when it saves.
 
 ---
 

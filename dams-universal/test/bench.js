@@ -119,11 +119,28 @@
       const tQuiz = time(() => {
         quiz = engine.createQuiz(normalized, `bench-${n}`);
       });
+      const answerLimit = Math.min(n, 2000); // cap answering work on the huge deck
+
+      // answerMs: realistic path (each answer persists the session).
       const tAnswer = time(() => {
-        const limit = Math.min(n, 2000); // cap answering work on the huge deck
-        for (let k = 0; k < limit; k++) {
+        for (let k = 0; k < answerLimit; k++) {
           quiz.answer(k % 3);
           quiz.next();
+        }
+      });
+
+      // answerOpMs: the answer() bookkeeping in isolation (no persistence), to
+      // show the aggregate counters make the operation itself O(1). The residual
+      // in answerMs is the durability write (full-state JSON serialization).
+      const noopStore = {
+        loadSession: () => ({ bookmarks: {}, marked: {}, answers: {}, weak: {}, lastIndex: 0, deckId: 'x', stats: { seen: 0, correct: 0, wrong: 0, startedAt: 0, elapsed: 0 } }),
+        saveSession() {},
+      };
+      const quizOp = new DAMS.quiz.Quiz(normalized, `bench-op-${n}`, { storage: noopStore });
+      const tAnswerOp = time(() => {
+        for (let k = 0; k < answerLimit; k++) {
+          quizOp.answer(k % 3);
+          quizOp.next();
         }
       });
 
@@ -144,6 +161,7 @@
         query20Ms: round(tQuery),
         quizBuildMs: round(tQuiz),
         answerMs: round(tAnswer),
+        answerOpMs: round(tAnswerOp),
         exportMs: round(tExport),
         jsonKB: Math.round(bytes / 1024),
         heapDeltaMB: heapDelta != null ? round(heapDelta / 1048576) : null,
@@ -168,7 +186,7 @@
 
   function render(rows, failures) {
     const root = document.getElementById('out') || document.body;
-    const header = ['n', 'normalizeMs', 'indexMs', 'query20Ms', 'quizBuildMs', 'answerMs', 'exportMs', 'jsonKB', 'heapDeltaMB'];
+    const header = ['n', 'normalizeMs', 'indexMs', 'query20Ms', 'quizBuildMs', 'answerMs', 'answerOpMs', 'exportMs', 'jsonKB', 'heapDeltaMB'];
     const head = '<tr>' + header.map((h) => `<th>${h}</th>`).join('') + '</tr>';
     const body = rows
       .map((r) => '<tr>' + header.map((h) => `<td>${r[h] == null ? '—' : r[h]}</td>`).join('') + '</tr>')

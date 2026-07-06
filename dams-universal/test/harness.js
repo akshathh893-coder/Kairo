@@ -187,6 +187,41 @@
       const q2 = new DAMS.quiz.Quiz(questions, 'persist', { storage: store });
       eq(q2.stats().answered, 1, 'second instance sees persisted answer');
     });
+    test('incremental counters match brute-force recount (incl. re-answer)', () => {
+      const q = makeQuiz(); // Q1 correct=0, Q2 correct=1, Q3 correct=0
+      q.answer(1); // Q1 wrong
+      q.next();
+      q.answer(1); // Q2 correct
+      q.next();
+      q.answer(1); // Q3 wrong
+      // Re-answer Q1 correctly: navigate back to pos 0.
+      q.jumpTo(1);
+      q.answer(0); // Q1 now correct — must move it out of weak, correct++/wrong--
+      const s = q.stats();
+      // Brute-force truth from the raw answer map.
+      const answers = Object.values(q.state.answers);
+      const correct = answers.filter((a) => a.correct).length;
+      const wrong = answers.length - correct;
+      eq(s.correct, correct, 'correct counter');
+      eq(s.wrong, wrong, 'wrong counter');
+      eq(s.answered, answers.length, 'answered = correct + wrong');
+      eq(s.weak, Object.keys(q.state.weak).length, 'weak counter');
+      eq(s.correct, 2, 'Q2 + re-answered Q1');
+      eq(s.weak, 1, 'only Q3 remains weak');
+    });
+    test('recountStats resyncs after direct state mutation (import path)', () => {
+      const q = makeQuiz();
+      // Simulate importing a session by replacing the state maps directly.
+      q.state.answers = { a: { correct: true, chosen: 0, at: 1 }, b: { correct: false, chosen: 0, at: 1 } };
+      q.state.weak = { b: 1 };
+      q.state.bookmarks = { a: true };
+      q.recountStats();
+      const s = q.stats();
+      eq(s.correct, 1);
+      eq(s.wrong, 1);
+      eq(s.weak, 1);
+      eq(s.bookmarks, 1);
+    });
 
     // ---- Search engine ----------------------------------------------------
     group('search-engine');
