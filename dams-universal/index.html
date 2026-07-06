@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>DAMS Universal Extractor</title>
+    <meta
+      name="description"
+      content="Offline, version-agnostic extractor that converts any DAMS HTML quiz into a universal quiz + Anki deck."
+    />
+    <link rel="stylesheet" href="css/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%97%88%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <!-- ================= Header ================= -->
+    <header class="app-header">
+      <div class="brand" id="homeBtn" role="button" tabindex="0" title="Home">
+        <span class="brand-mark">◈</span>
+        <span class="brand-text">DAMS <b>Universal Extractor</b></span>
+      </div>
+      <div class="header-actions">
+        <button id="searchBtn" class="icon-btn" title="Search (Ctrl/Cmd+K)" aria-label="Search">🔍</button>
+        <button id="exportBtn" class="icon-btn" title="Export" aria-label="Export">⇩</button>
+        <button id="debugToggle" class="icon-btn" title="Debug panel" aria-label="Debug">🐞</button>
+        <button id="themeToggle" class="icon-btn" title="Toggle dark mode" aria-label="Theme">◐</button>
+      </div>
+    </header>
+
+    <!-- ================= Toolbar (quiz mode) ================= -->
+    <nav class="app-toolbar" id="appToolbar" hidden>
+      <div class="deck-info">
+        <div class="deck-name" id="deckName">—</div>
+        <div class="deck-meta muted" id="deckMeta"></div>
+      </div>
+      <div class="filter-bar" id="filterBar"></div>
+    </nav>
+
+    <main class="app-main">
+      <!-- ---------- Landing ---------- -->
+      <section id="view-landing" class="view">
+        <div class="hero">
+          <h1>Convert <span class="accent">any</span> DAMS quiz into a universal format</h1>
+          <p class="lede">
+            Bootcamp · DVT · T&amp;D · BTR · RR · GT · PYQ — and any future DAMS HTML. Fully offline. Your file never
+            leaves this browser.
+          </p>
+          <div class="drop-zone" id="dropZone" tabindex="0">
+            <div class="drop-icon">⇪</div>
+            <div class="drop-title">Drop a DAMS <code>.html</code> file here</div>
+            <div class="drop-sub muted">or click to choose a file · exported <code>.json</code> sessions also work</div>
+            <input id="fileInput" type="file" accept=".html,.htm,.json,text/html" hidden />
+          </div>
+          <div class="landing-actions">
+            <button id="sampleBtn" class="btn ghost">Try a sample deck</button>
+            <button id="importBtn" class="btn ghost">Import session</button>
+            <input id="importInput" type="file" accept=".json" hidden />
+          </div>
+          <ul class="feature-grid">
+            <li><b>10 extraction strategies</b><span class="muted">Sandbox · AST · push/JSON/fetch hooks · recursive scan</span></li>
+            <li><b>Version-agnostic</b><span class="muted">No fixed variable names — the bank is discovered by structure</span></li>
+            <li><b>Full quiz engine</b><span class="muted">Bookmarks · weak/incorrect modes · shuffle · timer · stats</span></li>
+            <li><b>Anki export</b><span class="muted">TSV/CSV/JSON · basic/cloze/image · weak-only subsets</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ---------- Loading / extraction ---------- -->
+      <section id="view-loading" class="view" hidden>
+        <div class="loading-card">
+          <h2>Extracting questions…</h2>
+          <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+          <div class="progress-label" id="progressLabel">Starting…</div>
+          <pre class="extract-log" id="extractLog" aria-live="polite"></pre>
+          <div class="loading-actions" id="loadingActions" hidden>
+            <button class="btn" id="debugToggle2" onclick="document.getElementById('debugToggle').click()">Open debug panel</button>
+            <button class="btn ghost" onclick="document.getElementById('homeBtn').click()">Choose another file</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- Quiz ---------- -->
+      <section id="view-quiz" class="view" hidden>
+        <div class="quiz-layout">
+          <aside class="quiz-stats">
+            <h3>Statistics</h3>
+            <div class="stat-grid">
+              <div class="stat"><span class="stat-val" id="statTotal">0</span><span class="stat-key">Total</span></div>
+              <div class="stat"><span class="stat-val" id="statAnswered">0</span><span class="stat-key">Answered</span></div>
+              <div class="stat"><span class="stat-val ok" id="statCorrect">0</span><span class="stat-key">Correct</span></div>
+              <div class="stat"><span class="stat-val bad" id="statWrong">0</span><span class="stat-key">Wrong</span></div>
+              <div class="stat"><span class="stat-val" id="statAccuracy">0%</span><span class="stat-key">Accuracy</span></div>
+              <div class="stat"><span class="stat-val" id="statWeak">0</span><span class="stat-key">Weak</span></div>
+              <div class="stat"><span class="stat-val" id="statBookmarks">0</span><span class="stat-key">Bookmarks</span></div>
+              <div class="stat"><span class="stat-val" id="statTime">00:00</span><span class="stat-key">Time</span></div>
+            </div>
+            <button class="btn ghost small" id="resetBtn">Reset progress</button>
+          </aside>
+
+          <div class="quiz-main">
+            <div class="quiz-progress-track"><div class="quiz-progress-bar" id="quizProgressBar"></div></div>
+            <article class="question-card" id="questionCard"></article>
+
+            <div class="quiz-nav">
+              <button class="btn nav" id="prevBtn">← Prev</button>
+              <div class="jump">
+                <label for="jumpInput" class="muted">Go to</label>
+                <input id="jumpInput" type="number" min="1" value="1" inputmode="numeric" />
+              </div>
+              <button class="btn nav" id="randomBtn">🎲 Random</button>
+              <button class="btn nav primary" id="nextBtn">Next →</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ================= Search overlay ================= -->
+    <div id="searchOverlay" class="overlay" hidden>
+      <div class="overlay-card search-card">
+        <div class="search-head">
+          <input id="searchInput" type="search" placeholder="Search questions, answers, tags, explanations…" />
+          <button id="searchClose" class="icon-btn">✕</button>
+        </div>
+        <div id="searchResults" class="search-results">
+          <p class="muted">Type to search questions, answers, tags and explanations.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= Export panel ================= -->
+    <div id="exportPanel" class="side-panel" hidden>
+      <div class="panel-head">
+        <h3>Export</h3>
+        <button class="icon-btn" onclick="document.getElementById('exportPanel').hidden=true">✕</button>
+      </div>
+      <div class="panel-body">
+        <h4>Universal format</h4>
+        <div class="btn-row">
+          <button class="btn" id="expJson">Quiz JSON</button>
+          <button class="btn" id="expSession">Full session</button>
+        </div>
+
+        <h4>Anki</h4>
+        <label class="field">
+          <span class="muted">Subset</span>
+          <select id="ankiSubset">
+            <option value="all">All questions</option>
+            <option value="weak">Weak only</option>
+            <option value="incorrect">Incorrect only</option>
+            <option value="bookmarks">Bookmarked only</option>
+          </select>
+        </label>
+        <div class="anki-grid">
+          <div class="anki-col">
+            <span class="anki-label">Basic</span>
+            <button class="btn tiny" data-anki data-type="basic" data-format="tsv">TSV</button>
+            <button class="btn tiny" data-anki data-type="basic" data-format="csv">CSV</button>
+            <button class="btn tiny" data-anki data-type="basic" data-format="json">JSON</button>
+          </div>
+          <div class="anki-col">
+            <span class="anki-label">Cloze</span>
+            <button class="btn tiny" data-anki data-type="cloze" data-format="tsv">TSV</button>
+            <button class="btn tiny" data-anki data-type="cloze" data-format="csv">CSV</button>
+            <button class="btn tiny" data-anki data-type="cloze" data-format="json">JSON</button>
+          </div>
+          <div class="anki-col">
+            <span class="anki-label">Image</span>
+            <button class="btn tiny" data-anki data-type="image" data-format="tsv">TSV</button>
+            <button class="btn tiny" data-anki data-type="image" data-format="csv">CSV</button>
+            <button class="btn tiny" data-anki data-type="image" data-format="json">JSON</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= Debug panel ================= -->
+    <div id="debugPanel" class="side-panel wide" hidden>
+      <div class="panel-head">
+        <h3>🐞 Debug</h3>
+        <div>
+          <button class="btn tiny" id="debugCopy">Copy</button>
+          <button class="icon-btn" id="debugClose">✕</button>
+        </div>
+      </div>
+      <div class="panel-body" id="debugContent">
+        <p class="muted">Load a DAMS file to populate diagnostics.</p>
+      </div>
+    </div>
+
+    <!-- Optional real AST parser (defines window.acorn). The extractor
+         gracefully falls back to its built-in tokenizer if this file is absent. -->
+    <script src="vendor/acorn.js"></script>
+    <!-- Classic scripts (no ES modules) so the app runs by simply opening
+         index.html from disk. Loaded in dependency order onto window.DAMS. -->
+    <script src="js/utils.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/loader.js"></script>
+    <script src="js/extractor.js"></script>
+    <script src="js/normalizer.js"></script>
+    <script src="js/sandbox.js"></script>
+    <script src="js/quiz.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/anki.js"></script>
+    <script src="js/export.js"></script>
+    <script src="js/parser.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
