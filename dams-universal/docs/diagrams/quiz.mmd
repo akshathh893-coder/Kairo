@@ -1,0 +1,17 @@
+sequenceDiagram
+    actor User
+    participant Host as UI / Host
+    participant Quiz as QuizEngine
+    participant Store as SessionStore
+    participant Adapter as StorageAdapter
+    Host->>Quiz: engine.createQuiz(questions, deckId)
+    Quiz->>Store: loadSession(deckId)
+    Store->>Adapter: get("session:deckId")
+    Adapter-->>Store: persisted state
+    Store-->>Quiz: state
+    User->>Host: select option i
+    Host->>Quiz: answer(i)
+    Quiz->>Quiz: update stats / weak
+    Quiz->>Store: saveSession(deckId, state)
+    Store->>Adapter: set("session:deckId", state)
+    Quiz-->>Host: emit answered + stats

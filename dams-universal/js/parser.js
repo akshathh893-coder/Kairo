@@ -16,9 +16,23 @@
  */
 
 ;(function (DAMS) {
-  const { runInSandbox } = DAMS.sandbox;
-  const { scanObjectLiterals, dedupeCandidates } = DAMS.extractor;
-  const { normalizeBank, normalizeImported } = DAMS.normalizer;
+  /**
+   * Resolve the parser's collaborators, letting callers inject replacements
+   * (e.g. a stubbed sandbox in tests, or a host-provided normalizer). Anything
+   * omitted falls back to the default wired module, so existing callers that
+   * pass no deps behave exactly as before.
+   * @param {Object} [deps]
+   * @returns {{runInSandbox:Function, scanObjectLiterals:Function, dedupeCandidates:Function, normalizeBank:Function, normalizeImported:Function}}
+   */
+  function resolveDeps(deps = {}) {
+    return {
+      runInSandbox: deps.runInSandbox || DAMS.sandbox.runInSandbox,
+      scanObjectLiterals: deps.scanObjectLiterals || DAMS.extractor.scanObjectLiterals,
+      dedupeCandidates: deps.dedupeCandidates || DAMS.extractor.dedupeCandidates,
+      normalizeBank: deps.normalizeBank || DAMS.normalizer.normalizeBank,
+      normalizeImported: deps.normalizeImported || DAMS.normalizer.normalizeImported,
+    };
+  }
 
   /**
    * @typedef {Object} ExtractionReport
@@ -33,9 +47,11 @@
    * Run the full extraction pipeline.
    * @param {import('./loader.js').LoadedFile} file
    * @param {(msg:string, pct?:number)=>void} [onProgress]
+   * @param {Object} [deps] optional injected collaborators (see resolveDeps)
    * @returns {Promise<ExtractionReport>}
    */
-  async function extract(file, onProgress = () => {}) {
+  async function extract(file, onProgress = () => {}, deps = {}) {
+    const { runInSandbox, scanObjectLiterals, dedupeCandidates, normalizeBank, normalizeImported } = resolveDeps(deps);
     const log = [];
     const say = (msg, pct) => {
       log.push(msg);
@@ -105,7 +121,7 @@
     let questions = [];
     let strategy = 'none';
     if (best) {
-      questions = mergeBanks(candidates).questions;
+      questions = mergeBanks(candidates, normalizeBank).questions;
       strategy = candidates.length > 1 ? `merged (${best.source} +${candidates.length - 1})` : best.source;
     }
 
@@ -117,9 +133,11 @@
 
   /**
    * Merge multiple candidate banks, de-duplicating questions.
-   * @param {Array<{data:any[]}>} cands @returns {{ questions: import('./quiz.js').Question[] }}
+   * @param {Array<{data:any[]}>} cands
+   * @param {Function} normalizeBank injected normalizer
+   * @returns {{ questions: import('./quiz.js').Question[] }}
    */
-  function mergeBanks(cands) {
+  function mergeBanks(cands, normalizeBank) {
     const combined = [];
     for (const c of cands) combined.push(...c.data);
     return normalizeBank(combined);

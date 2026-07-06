@@ -10,17 +10,19 @@
 
 ;(function (DAMS) {
   const { $, $$, el, escapeHtml, debounce, formatTime, downloadFile } = DAMS.utils;
-  const { loadFile, wireDropZone, readFileText } = DAMS.loader;
-  const { extract } = DAMS.parser;
-  const { Quiz, deckIdFor, FILTERS } = DAMS.quiz;
-  const { SearchIndex } = DAMS.search;
+  const { wireDropZone, readFileText } = DAMS.loader;
+  const { FILTERS } = DAMS.quiz;
   const { Storage } = DAMS.storage;
   const { exportUniversalJSON, exportAnki, exportSession, parseSession } = DAMS.exporter;
   const { normalizeImported } = DAMS.normalizer;
 
-  /** @type {InstanceType<typeof Quiz>|null} */
+  // The UI is just another host of the engine: one wiring path, no duplicated
+  // coupling. Extraction, quiz creation and search all go through this facade.
+  const engine = DAMS.createEngine();
+
+  /** @type {any} */
   let quiz = null;
-  /** @type {InstanceType<typeof SearchIndex>|null} */
+  /** @type {any} */
   let index = null;
   let lastReport = null;
 
@@ -83,8 +85,7 @@
     setProgress(0, 'Reading file...');
     clearLog();
     try {
-      const loaded = await loadFile(file);
-      const report = await extract(loaded, (msg, pct) => {
+      const report = await engine.extractor.extract(file, (msg, pct) => {
         appendLog(msg);
         if (typeof pct === 'number') setProgress(pct, msg);
       });
@@ -107,9 +108,9 @@
    * @param {any[]} questions @param {string} fileName @param {any} [report]
    */
   function startQuiz(questions, fileName, report) {
-    const deckId = deckIdFor(questions, fileName);
-    quiz = new Quiz(questions, deckId);
-    index = new SearchIndex(questions);
+    const deckId = engine.deckIdFor(questions, fileName);
+    quiz = engine.createQuiz(questions, deckId);
+    index = engine.createSearch(questions);
     quiz.startTimer();
 
     quiz.on('change', renderQuestion);

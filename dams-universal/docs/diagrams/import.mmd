@@ -1,0 +1,20 @@
+sequenceDiagram
+    actor User
+    participant Host as Host (app.js / Kairos)
+    participant Engine as createEngine()
+    participant Loader as loader.js
+    participant Parser as parser.js
+    User->>Host: choose .html or .session.json
+    Host->>Engine: engine.extractor.extract(File)
+    Engine->>Loader: loadFile(File)
+    Loader->>Loader: readFileText + parseHtml
+    alt session JSON
+        Loader-->>Engine: LoadedFile{ isSessionJson }
+        Engine->>Parser: extract(loaded)
+        Parser->>Parser: normalizeImported(sessionData)
+        Parser-->>Engine: { questions, strategy:"session-import" }
+    else DAMS HTML
+        Loader-->>Engine: LoadedFile{ doc, scripts[] }
+        Engine->>Parser: extract(loaded)
+    end
+    Engine-->>Host: ExtractionReport

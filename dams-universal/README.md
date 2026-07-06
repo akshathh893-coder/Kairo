@@ -48,9 +48,24 @@ dams-universal/
 │   └── style.css         # Responsive, dark-mode-aware styling (no framework)
 ├── vendor/
 │   └── acorn.js          # Optional real AST parser (auto-detected)
+├── docs/                 # Architecture, integration & migration documentation
+│   ├── ARCHITECTURE.md         # Every subsystem + coupling rules
+│   ├── INTEGRATION_KAIROS.md   # Embedding into Kairos AI (iOS/WKWebView)
+│   ├── MIGRATION_CHECKLIST.md  # Step-by-step embedding checklist
+│   ├── SEQUENCE_DIAGRAMS.md     # Import/Extraction/Normalization/Quiz/Export
+│   └── diagrams/*.mmd           # Raw Mermaid sources
+├── test/                 # Independent tests + benchmarks
+│   ├── index.html · harness.js  # Unit/protocol/integration suite
+│   ├── bench.html · bench.js     # Stress + performance + memory (10/100/1k/10k)
+│   └── run.mjs                    # Headless Playwright driver
 └── js/
     ├── utils.js          # Shared helpers + Emitter + safe deep-walk
-    ├── storage.js        # localStorage persistence (bookmarks, progress, stats)
+    ├── core/
+    │   ├── interfaces.js # Public protocols (Extractor, QuizEngine, Storage, …)
+    │   └── engine.js     # Composition root: DAMS.createEngine(config)
+    ├── adapters/
+    │   └── storage.adapter.js  # StorageAdapter impls + SessionStore
+    ├── storage.js        # Backward-compat default store (over the adapter)
     ├── loader.js         # File API reading + HTML/script splitting
     ├── sandbox.js        # Instrumented isolated execution + postMessage harvest
     ├── extractor.js      # Scoring heuristics + AST/tokenizer literal scanning
@@ -58,14 +73,43 @@ dams-universal/
     ├── parser.js         # Orchestrates all strategies, merges results
     ├── quiz.js           # Quiz engine (navigation, filters, timer, stats)
     ├── anki.js           # Anki card builders (basic/cloze/image, TSV/CSV/JSON)
-    ├── export.js         # Universal JSON, Anki, session export/import
+    ├── export.js         # Pure serializers + download wrappers
     ├── search.js         # Instant field-weighted full-text search
-    └── app.js            # DOM controller wiring everything together
+    └── app.js            # DOM controller (built on one engine instance)
 ```
 
 All modules publish onto a single global namespace, `window.DAMS`
 (`DAMS.utils`, `DAMS.parser`, `DAMS.quiz`, …). Scripts are loaded in dependency
 order at the bottom of `index.html`.
+
+### Embeddable engine
+
+`DAMS.createEngine(config)` is the single public entry point and the surface a
+host application (e.g. **Kairos AI**) links against. It wires the subsystems via
+dependency injection and returns protocol-conforming facades — `extractor`,
+`createQuiz`, `createSearch`, `flashcards`, `exporter`, `storage`. Inject a
+custom `StorageAdapter` (or run with the in-memory one for headless/tests):
+
+```js
+const engine = DAMS.createEngine({ storage: myAdapter /* optional */ });
+const report = await engine.extractor.extract(fileOrHtml);   // → { questions, … }
+const quiz   = engine.createQuiz(report.questions, deckId);
+const idx    = engine.createSearch(report.questions);
+engine.exporter.anki(report.questions, { type: 'cloze', format: 'tsv' });
+```
+
+See `docs/ARCHITECTURE.md` for the full design and `docs/INTEGRATION_KAIROS.md`
+for embedding into the iOS app.
+
+### Tests & benchmarks
+
+Open `test/index.html` (unit/protocol/integration) or `test/bench.html`
+(stress + memory at 10/100/1000/10000 questions) in a browser, or run headless:
+
+```bash
+npx http-server -p 8199 -c-1            # serve the repo root
+node dams-universal/test/run.mjs        # tests + benchmarks; non-zero on failure
+```
 
 ---
 

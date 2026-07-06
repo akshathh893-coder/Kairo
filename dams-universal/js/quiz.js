@@ -11,7 +11,6 @@
 
 ;(function (DAMS) {
   const { Emitter, clamp, shuffle, hash } = DAMS.utils;
-  const { Storage } = DAMS.storage;
 
   /**
    * @typedef {Object} Option
@@ -30,13 +29,20 @@
 
   class Quiz extends Emitter {
     /**
-     * @param {Question[]} questions @param {string} deckId
+     * @param {Question[]} questions
+     * @param {string} deckId
+     * @param {{ storage?: { loadSession:Function, saveSession:Function } }} [deps]
+     *   Optional dependency injection. `storage` is any object exposing
+     *   loadSession/saveSession (a SessionStore). Defaults to the global
+     *   `DAMS.storage.Storage` so `new Quiz(questions, deckId)` keeps working.
      */
-    constructor(questions, deckId) {
+    constructor(questions, deckId, deps = {}) {
       super();
       this.all = questions;
       this.deckId = deckId;
-      this.state = Storage.loadSession(deckId);
+      /** @type {{ loadSession:Function, saveSession:Function }} */
+      this.storage = deps.storage || DAMS.storage.Storage;
+      this.state = this.storage.loadSession(deckId);
       this.filter = 'all';
       this.shuffled = false;
       this.timerStart = 0;
@@ -59,7 +65,7 @@
     save() {
       this.state.lastIndex = this.pos;
       this.state.stats.elapsed = this.elapsed();
-      Storage.saveSession(this.deckId, this.state);
+      this.storage.saveSession(this.deckId, this.state);
     }
 
     // ---- Navigation --------------------------------------------------------
@@ -212,7 +218,7 @@
     }
 
     reset() {
-      this.state = Storage.loadSession(this.deckId);
+      this.state = this.storage.loadSession(this.deckId);
       this.state.answers = {};
       this.state.weak = {};
       this.state.bookmarks = {};

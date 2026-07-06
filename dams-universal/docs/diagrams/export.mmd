@@ -1,0 +1,19 @@
+sequenceDiagram
+    actor User
+    participant Host as UI / Host
+    participant Exporter as Exporter facade
+    participant Anki as anki.js
+    User->>Host: choose format
+    alt Universal JSON
+        Host->>Exporter: universalJSON(questions, meta)
+        Exporter-->>Host: JSON string
+    else Anki
+        Host->>Exporter: anki(questions, {type, format})
+        Exporter->>Anki: buildCards + serialize
+        Anki-->>Exporter: cards serialized
+        Exporter-->>Host: { filename, mime, content }
+    else Session
+        Host->>Exporter: session(quiz)
+        Exporter-->>Host: { filename, mime, content }
+    end
+    Host-->>User: file saved / shared

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DAMS tests</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; color: #1c2230; }
+      h1 { font-size: 18px; }
+      h2.ok { color: #16a34a; }
+      h2.fail { color: #dc2626; }
+      pre { background: #f4f6fb; padding: 14px; border-radius: 10px; overflow: auto; font-size: 13px; line-height: 1.5; }
+      button { padding: 10px 16px; font-size: 14px; border-radius: 10px; border: 1px solid #dfe3ec; background: #fff; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>DAMS Universal Extractor — unit / protocol / integration tests</h1>
+    <p>Each subsystem is exercised in isolation with injected dependencies (MemoryStorageAdapter), independent of the UI.</p>
+    <button onclick="DAMS.__runTests()">Re-run</button>
+    <div id="out"><em>Running…</em></div>
+
+    <!-- Subsystems under test (same dependency order as index.html). -->
+    <script src="../vendor/acorn.js"></script>
+    <script src="../js/utils.js"></script>
+    <script src="../js/core/interfaces.js"></script>
+    <script src="../js/adapters/storage.adapter.js"></script>
+    <script src="../js/storage.js"></script>
+    <script src="../js/loader.js"></script>
+    <script src="../js/extractor.js"></script>
+    <script src="../js/normalizer.js"></script>
+    <script src="../js/sandbox.js"></script>
+    <script src="../js/quiz.js"></script>
+    <script src="../js/search.js"></script>
+    <script src="../js/anki.js"></script>
+    <script src="../js/export.js"></script>
+    <script src="../js/parser.js"></script>
+    <script src="../js/core/engine.js"></script>
+    <!-- Test runner -->
+    <script src="harness.js"></script>
+  </body>
+</html>
