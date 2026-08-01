@@ -54,7 +54,13 @@
       if (panel) panel.hidden = !panel.hidden;
       if (panel && !panel.hidden) renderDebug();
     });
-    $('#homeBtn')?.addEventListener('click', () => showView('landing'));
+    const homeBtn = $('#homeBtn');
+    if (homeBtn) {
+      homeBtn.addEventListener('click', () => showView('landing'));
+      homeBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showView('landing'); }
+      });
+    }
   }
 
   /**

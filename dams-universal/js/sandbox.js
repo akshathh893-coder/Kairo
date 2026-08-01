@@ -286,7 +286,11 @@
    * @param {string} code @returns {string}
    */
   function wrapScript(code) {
-    return code.replace(/<\/script>/gi, '<\\/script>');
+    // Escape sequences that can break out of or confuse a <script> block when
+    // the sandbox HTML is parsed: closing tag and HTML comment open.
+    return code
+      .replace(/<\/script>/gi, '<\\/script>')
+      .replace(/<!--/g, '<\\!--');
   }
 
   /**
@@ -354,9 +358,12 @@
       let settled = false;
       /** @type {SandboxResult} */
       let best = { banks: [], debug: {} };
+      /** @type {ReturnType<typeof setTimeout>|null} */
+      let earlyTimer = null;
 
       const cleanup = () => {
         window.removeEventListener('message', onMessage);
+        if (earlyTimer !== null) clearTimeout(earlyTimer);
         try { iframe.remove(); } catch { /* noop */ }
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       };
@@ -375,11 +382,16 @@
         const totalNew = (d.banks || []).reduce((s, b) => s + (b.count || 0), 0);
         const totalOld = (best.banks || []).reduce((s, b) => s + (b.count || 0), 0);
         if (!best.banks.length || totalNew >= totalOld) best = { banks: d.banks || [], debug: d.debug || {} };
+        // Resolve 150ms after the last harvest rather than waiting the full
+        // timeout. This handles the 60ms (on-load) and 900ms (async) harvests
+        // without blocking the UI for seconds when extraction succeeds quickly.
+        if (earlyTimer !== null) clearTimeout(earlyTimer);
+        earlyTimer = setTimeout(finish, 150);
       };
       window.addEventListener('message', onMessage);
 
       iframe.addEventListener('error', () => onLog('sandbox: iframe error'));
-      // Resolve after the timeout so both harvests (load + 900ms) can arrive.
+      // Fallback: resolve after the full timeout if no harvest ever arrives.
       setTimeout(finish, timeoutMs);
 
       iframe.src = url;

@@ -75,6 +75,31 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   /**
+   * Sanitize an HTML string by removing scripts and inline event handlers
+   * before it is injected into the DOM via innerHTML. The content originates
+   * from untrusted DAMS files so structural HTML (images, formatting) is kept
+   * while executable JavaScript is stripped.
+   * @param {any} html
+   * @returns {string}
+   */
+  function sanitizeHtml(html) {
+    if (!html) return '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(html);
+    tmp.querySelectorAll('script').forEach((s) => s.remove());
+    tmp.querySelectorAll('*').forEach((node) => {
+      for (const attr of Array.from(node.attributes)) {
+        if (attr.name.toLowerCase().startsWith('on')) node.removeAttribute(attr.name);
+      }
+      for (const attr of ['href', 'src', 'action', 'formaction']) {
+        const val = node.getAttribute(attr);
+        if (val && /^\s*javascript:/i.test(val)) node.removeAttribute(attr);
+      }
+    });
+    return tmp.innerHTML;
+  }
+
+  /**
    * Create an element with attributes and children in one call.
    * @param {string} tag
    * @param {Record<string, any>} [attrs]
@@ -90,7 +115,7 @@
       else if (k === 'dataset' && typeof v === 'object') Object.assign(node.dataset, v);
       else if (k.startsWith('on') && typeof v === 'function') {
         node.addEventListener(k.slice(2).toLowerCase(), v);
-      } else if (k === 'html') node.innerHTML = v;
+      } else if (k === 'html') node.innerHTML = sanitizeHtml(v);
       else node.setAttribute(k, v === true ? '' : String(v));
     }
     const kids = Array.isArray(children) ? children : [children];
@@ -287,6 +312,7 @@
     $,
     $$,
     el,
+    sanitizeHtml,
     escapeHtml,
     stripHtml,
     uid,

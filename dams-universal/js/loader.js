@@ -135,6 +135,9 @@
       if (file) onFile(file);
     });
     zone.addEventListener('click', () => input.click());
+    zone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    });
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (file) onFile(file);

@@ -9,13 +9,17 @@
  *   node test/run.mjs
  * Exits non-zero if any test fails or any benchmark budget is exceeded.
  */
-import pkg from '/opt/node22/lib/node_modules/playwright/index.js';
-const { chromium } = pkg;
+import { chromium } from 'playwright';
 
 const base = process.argv[2] || 'http://127.0.0.1:8199';
-const CHROME = process.env.PW_CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
-const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox', '--js-flags=--expose-gc'] });
+/** @type {import('playwright').LaunchOptions} */
+const launchOpts = { args: ['--no-sandbox', '--js-flags=--expose-gc'] };
+// Allow the caller to specify a custom Chromium binary via env (useful in CI
+// or air-gapped environments); if not set, Playwright uses its own build.
+if (process.env.PW_CHROME) launchOpts.executablePath = process.env.PW_CHROME;
+
+const browser = await chromium.launch(launchOpts);
 const page = await browser.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e.message)));
