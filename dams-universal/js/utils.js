@@ -84,10 +84,15 @@
    */
   function sanitizeHtml(html) {
     if (!html) return '';
-    const tmp = document.createElement('div');
-    tmp.innerHTML = String(html);
-    tmp.querySelectorAll('script').forEach((s) => s.remove());
-    tmp.querySelectorAll('*').forEach((node) => {
+    // Parse into a <template>: its contents live in an inert document, so no
+    // images load and no `onerror`/`onload` handlers fire while we sanitize —
+    // unlike a detached <div>, where `<img src=x onerror=…>` would execute
+    // during parsing, before we could strip the attribute.
+    const tmpl = document.createElement('template');
+    tmpl.innerHTML = String(html);
+    const frag = tmpl.content;
+    frag.querySelectorAll('script').forEach((s) => s.remove());
+    frag.querySelectorAll('*').forEach((node) => {
       for (const attr of Array.from(node.attributes)) {
         if (attr.name.toLowerCase().startsWith('on')) node.removeAttribute(attr.name);
       }
@@ -96,7 +101,10 @@
         if (val && /^\s*javascript:/i.test(val)) node.removeAttribute(attr);
       }
     });
-    return tmp.innerHTML;
+    // Serialize the cleaned (now safe) fragment.
+    const out = document.createElement('div');
+    out.append(frag);
+    return out.innerHTML;
   }
 
   /**

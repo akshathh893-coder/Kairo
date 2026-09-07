@@ -309,6 +309,16 @@
       .filter((s) => s.kind === 'inline' && s.code.trim())
       .filter((s) => /javascript|module|text\/js/i.test(s.type) || s.type === 'text/javascript' || s.type === '')
       .map((s, i) => {
+        // ES module scripts must be emitted as real modules: their top-level
+        // import/export can't be wrapped in try/catch (that would be a parse
+        // error), and injecting them as classic scripts makes module-based DAMS
+        // quizzes fail to execute entirely. Modules don't expose top-level
+        // globals, but the runtime hooks (push/JSON.parse/defineProperty) still
+        // fire and the static AST scan covers the rest; window.onerror captures
+        // any load failure.
+        if (/\bmodule\b/i.test(s.type)) {
+          return `<script type="module">${wrapScript(s.code)}<\/script>`;
+        }
         const safe = `try{\n${s.code}\n}catch(__e){try{window.__DAMS_CAPTURE__.errors.push('script#${i}: '+(__e&&__e.message||__e));}catch(_){}}\n//# sourceURL=dams-script-${i}.js`;
         return `<script>${wrapScript(safe)}<\/script>`;
       })
@@ -382,11 +392,14 @@
         const totalNew = (d.banks || []).reduce((s, b) => s + (b.count || 0), 0);
         const totalOld = (best.banks || []).reduce((s, b) => s + (b.count || 0), 0);
         if (!best.banks.length || totalNew >= totalOld) best = { banks: d.banks || [], debug: d.debug || {} };
-        // Resolve 150ms after the last harvest rather than waiting the full
-        // timeout. This handles the 60ms (on-load) and 900ms (async) harvests
-        // without blocking the UI for seconds when extraction succeeds quickly.
-        if (earlyTimer !== null) clearTimeout(earlyTimer);
-        earlyTimer = setTimeout(finish, 150);
+        // Fast-resolve 150ms after a harvest — but only once we actually have
+        // banks. An empty first harvest (a bank built asynchronously) must not
+        // trigger early resolution, or the later 900ms harvest is missed; in
+        // that case we keep waiting for it (or the full-timeout fallback).
+        if (best.banks.length) {
+          if (earlyTimer !== null) clearTimeout(earlyTimer);
+          earlyTimer = setTimeout(finish, 150);
+        }
       };
       window.addEventListener('message', onMessage);
 

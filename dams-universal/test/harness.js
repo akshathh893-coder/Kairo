@@ -302,6 +302,18 @@
       assert(threw, 'should reject incomplete adapter');
     });
 
+    // ---- HTML sanitization (untrusted question content) -------------------
+    group('sanitize');
+    test('el(html) strips <script>, on* handlers and javascript: URLs', () => {
+      const node = DAMS.utils.el('div', { html: '<img src=x onerror="window.__pwn=1"><a href="javascript:alert(1)">x</a><script>window.__pwn=2<\/script><b>ok</b>' });
+      const out = node.innerHTML.toLowerCase();
+      assert(!out.includes('onerror'), 'onerror stripped');
+      assert(!out.includes('javascript:'), 'javascript: URL stripped');
+      assert(!out.includes('<script'), 'script element removed');
+      assert(out.includes('<b>ok</b>'), 'safe markup preserved');
+      eq(window.__pwn, undefined, 'no payload executed during sanitization');
+    });
+
     // ---- Extraction integration (real DOM, headless storage) --------------
     group('extraction-integration');
     await testAsync('extractFromHtml discovers a push-built bank', async () => {
@@ -320,6 +332,27 @@
         'closure.html',
       );
       assert(report.questions.length === 2, 'expected 2 from closure, got ' + report.questions.length);
+    });
+    await testAsync('extractFromHtml catches an ASYNCHRONOUSLY-built bank', async () => {
+      // The bank is pushed inside setTimeout, so it is absent from the on-load
+      // harvest and only present in the later (900ms) harvest. Verifies the
+      // sandbox does not early-resolve on an empty first harvest.
+      const engine = DAMS.createEngine({ storage: new MemoryStorageAdapter() });
+      const report = await engine.extractor.extractFromHtml(
+        '<!doctype html><html><body><script>var LATE=[];setTimeout(function(){[["Async Q1?",["a","b"],"A"],["Async Q2?",["c","d"],"B"]].forEach(function(r){LATE.push({question:r[0],options:r[1],answer:r[2]});});window.__late=LATE;},300);<\/script></body></html>',
+        'async.html',
+      );
+      assert(report.questions.length === 2, 'expected 2 async questions, got ' + report.questions.length);
+    });
+    await testAsync('extractFromHtml executes ES module scripts (import/export)', async () => {
+      // `export` forces true module semantics; injected as a classic script it
+      // would be a SyntaxError and the push hook would never see the bank.
+      const engine = DAMS.createEngine({ storage: new MemoryStorageAdapter() });
+      const report = await engine.extractor.extractFromHtml(
+        '<!doctype html><html><body><script type="module">const M=[];[["Mod Q?",["a","b"],"A"]].forEach(r=>M.push({question:r[0],options:r[1],answer:r[2]}));export const count=M.length;<\/script></body></html>',
+        'module.html',
+      );
+      assert(report.questions.length === 1, 'expected 1 module question, got ' + report.questions.length);
     });
 
     render();
