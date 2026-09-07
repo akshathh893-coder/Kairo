@@ -1,0 +1,15 @@
+sequenceDiagram
+    participant Parser as parser.js
+    participant Sandbox as sandbox.js (blob iframe)
+    participant Extractor as extractor.js
+    participant Norm as normalizer.js
+    Parser->>Sandbox: runInSandbox(loaded)
+    Sandbox->>Sandbox: install hooks BEFORE DAMS code
+    Sandbox->>Sandbox: execute inline scripts (guarded)
+    Sandbox->>Sandbox: harvest() recursive scan + buffers
+    Sandbox-->>Parser: postMessage { banks[], debug }
+    Parser->>Extractor: scanObjectLiterals(code)
+    Extractor-->>Parser: candidate banks (const/closure/IIFE)
+    Parser->>Extractor: dedupeCandidates(all)
+    Parser->>Norm: normalizeBank(merged)
+    Norm-->>Parser: { questions[] }

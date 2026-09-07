@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant Norm as normalizer.js
+    participant Q as raw question (any DAMS shape)
+    Norm->>Q: pick(question|stem|text|raw_text)
+    Norm->>Q: pick(options|choices|opts|answers)
+    Norm->>Norm: normalizeOptions
+    Norm->>Q: pick(correct|answer|correctIndex)
+    Norm->>Norm: resolveCorrect(index|letter|text|bool)
+    Norm->>Q: collect explanation/images/videos/audio/tags
+    Norm-->>Norm: canonical question
